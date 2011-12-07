@@ -12,11 +12,20 @@ build-type:      Simple
 homepage:        https://github.com/snoyberg/enumerator-exception
 extra-source-files: test/main.hs
 
+flag mc03
+
 library
     build-depends:              base                     >= 4             && < 5
                               , enumerator               >= 0.4           && < 0.5
-                              , lifted-base              >= 0.1.0.1       && < 0.2
+                              , monad-control            >= 0.2           && < 0.4
+
+    if flag(mc03)
+        build-depends:          lifted-base              >= 0.1.0.1       && < 0.2
                               , monad-control            >= 0.3           && < 0.4
+        cpp-options:            -DMC03
+    else
+        build-depends:          monad-control            >= 0.2           && < 0.3
+
     exposed-modules:            Data.Enumerator.Exception
 
 test-suite tests
