@@ -3,6 +3,8 @@
 module Data.Enumerator.Exception
     ( catch
     , try
+    , finally
+    , throwIO
     ) where
 
 #if MC03
@@ -16,6 +18,12 @@ import qualified Control.Exception.Control as E
 #endif
 import Data.Enumerator (Iteratee (..), Step (..))
 import Prelude hiding (catch)
+import Control.Monad.Trans.Class (lift)
+
+throwIO :: (E.Exception e, MBCIO m)
+        => e
+        -> Iteratee a m b
+throwIO = lift . E.throwIO
 
 catch :: (E.Exception e, MBCIO m)
       => Iteratee a m b
@@ -32,3 +40,18 @@ try :: (E.Exception e, MBCIO m)
     => Iteratee a m b
     -> Iteratee a m (Either e b)
 try i = catch (fmap Right i) (return . Left)
+
+try'
+    :: MBCIO m
+    => Iteratee a m b
+    -> Iteratee a m (Either E.SomeException b)
+try' = try
+
+finally :: MBCIO m
+        => Iteratee a m b
+        -> Iteratee a m c
+        -> Iteratee a m b
+finally body final = do
+    ea <- try' body
+    _ <- try' final
+    either throwIO return ea

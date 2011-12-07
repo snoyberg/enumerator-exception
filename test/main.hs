@@ -10,6 +10,10 @@ import qualified Data.Enumerator.Exception as EE
 import Control.Monad.Trans.Reader (runReaderT)
 import Control.Monad.Trans.Writer (runWriterT)
 import Control.Monad ((=<<))
+import qualified Data.IORef as I
+import qualified Control.Exception
+import Test.HUnit ((@?=))
+import Control.Monad.IO.Class (MonadIO, liftIO)
 
 #if MIN_VERSION_monad_control(0, 3, 0)
 import Control.Monad.Trans.Control (MonadBaseControl)
@@ -20,8 +24,9 @@ import Control.Monad.IO.Control (MonadControlIO)
 #endif
 
 type Unwrap m = forall a. m a -> IO a
-type Case = forall m. MBCIO m => Unwrap m -> IO ()
+type Case = forall m. (MBCIO m, MonadIO m) => Unwrap m -> IO ()
 data ErrType = ErrPre | ErrPost | NoErr
+type ECase = ErrType -> Case
 
 allMonads :: String -> Case -> Specs
 allMonads str f = describe str $ do
@@ -32,7 +37,7 @@ allMonads str f = describe str $ do
 fst' :: (a, ()) -> a
 fst' (a, ()) = a
 
-allErrs :: String -> (ErrType -> Case) -> Specs
+allErrs :: String -> (ECase) -> Specs
 allErrs str f = do
     allMonads (str ++ " pre") $ f ErrPre
     allMonads (str ++ " post") $ f ErrPost
@@ -42,25 +47,35 @@ main :: IO ()
 main = hspecX $ do
     allErrs "catch" caseCatch
     allErrs "try" caseTry
+    allErrs "finally" caseFinally
 
 body err = do
     case err of { ErrPre -> error "ErrPre" ; _ -> return () }
     _ <- EL.consume
     case err of { ErrPost -> error "ErrPost" ; _ -> return () }
 
-caseCatch :: ErrType -> Case
+runner iter = E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ iter
+
+caseCatch :: ECase
 caseCatch err unwrap =
-    unwrap $ E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ EE.catch (body err) ignorer
+    unwrap $ runner $ EE.catch (body err) ignorer
   where
     ignorer :: Monad m => SomeException -> E.Iteratee a m ()
     ignorer _ = return ()
 
-caseTry :: ErrType -> Case
-caseTry err unwrap =
-    (unwrap $ E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ EE.try (body err)) >>= check err
-  where
-    check :: ErrType -> Either SomeException () -> IO ()
-    check NoErr (Right ()) = return ()
-    check NoErr (Left e) = error "unexpected exception (pun)"
-    check _ (Left _) = return ()
-    check _ (Right ()) = error "There should have been an exception caught"
+caseTry :: ECase
+caseTry err unwrap = (unwrap $ runner $ EE.try (body err)) >>= check err
+
+check :: ErrType -> Either SomeException () -> IO ()
+check NoErr (Right ()) = return ()
+check NoErr (Left e) = error "unexpected exception (pun)"
+check _ (Left _) = return ()
+check _ (Right ()) = error "There should have been an exception caught"
+
+caseFinally :: ECase
+caseFinally err unwrap = do
+    i <- I.newIORef (0 :: Int)
+    ea <- Control.Exception.try $ unwrap $ runner $ EE.finally (body err) (liftIO $ I.modifyIORef i (+ 1))
+    res <- I.readIORef i
+    res @?= 1
+    check err ea

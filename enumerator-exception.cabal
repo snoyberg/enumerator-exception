@@ -18,6 +18,7 @@ library
     build-depends:              base                     >= 4             && < 5
                               , enumerator               >= 0.4           && < 0.5
                               , monad-control            >= 0.2           && < 0.4
+                              , transformers             >= 0.2           && < 0.3
 
     if flag(mc03)
         build-depends:          lifted-base              >= 0.1.0.1       && < 0.2
@@ -38,6 +39,7 @@ test-suite tests
                               , monad-control
                               , enumerator
                               , hspec
+                              , HUnit
 
 source-repository head
   type:     git
