@@ -21,6 +21,7 @@ import Control.Monad.IO.Control (MonadControlIO)
 
 type Unwrap m = forall a. m a -> IO a
 type Case = forall m. MBCIO m => Unwrap m -> IO ()
+data ErrType = ErrPre | ErrPost | NoErr
 
 allMonads :: String -> Case -> Specs
 allMonads str f = describe str $ do
@@ -28,27 +29,38 @@ allMonads str f = describe str $ do
     it "ReaderT" $ f $ flip runReaderT ()
     it "WriterT" $ f $ fmap fst' . runWriterT
 
-main :: IO ()
-main = hspecX $ do
-    allMonads "catch" caseCatch
-    allMonads "try" caseTry
-
 fst' :: (a, ()) -> a
 fst' (a, ()) = a
 
-caseCatch :: Case
-caseCatch unwrap = unwrap $ E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ flip EE.catch ignorer $ do
+allErrs :: String -> (ErrType -> Case) -> Specs
+allErrs str f = do
+    allMonads (str ++ " pre") $ f ErrPre
+    allMonads (str ++ " post") $ f ErrPost
+    allMonads (str ++ " none") $ f NoErr
+
+main :: IO ()
+main = hspecX $ do
+    allErrs "catch" caseCatch
+    allErrs "try" caseTry
+
+body err = do
+    case err of { ErrPre -> error "ErrPre" ; _ -> return () }
     _ <- EL.consume
-    error "foo"
+    case err of { ErrPost -> error "ErrPost" ; _ -> return () }
+
+caseCatch :: ErrType -> Case
+caseCatch err unwrap =
+    unwrap $ E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ EE.catch (body err) ignorer
   where
     ignorer :: Monad m => SomeException -> E.Iteratee a m ()
     ignorer _ = return ()
 
-caseTry :: Case
-caseTry unwrap = check =<< (unwrap $ E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ EE.try $ do
-    _ <- EL.consume
-    error "foo")
+caseTry :: ErrType -> Case
+caseTry err unwrap =
+    (unwrap $ E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ EE.try (body err)) >>= check err
   where
-    check :: Either SomeException () -> IO ()
-    check (Left _) = return ()
-    check (Right ()) = error "There should have been an exception caught"
+    check :: ErrType -> Either SomeException () -> IO ()
+    check NoErr (Right ()) = return ()
+    check NoErr (Left e) = error "unexpected exception (pun)"
+    check _ (Left _) = return ()
+    check _ (Right ()) = error "There should have been an exception caught"
