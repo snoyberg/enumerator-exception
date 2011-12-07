@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE RankNTypes #-}
 import Test.Hspec.Monadic
 import Test.Hspec.HUnit
 import Control.Exception (SomeException)
@@ -19,21 +19,24 @@ import Control.Monad.IO.Control (MonadControlIO)
 #define MBCIO MonadControlIO
 #endif
 
+type Unwrap m = forall a. m a -> IO a
+type Case = forall m. MBCIO m => Unwrap m -> IO ()
+
+allMonads :: String -> Case -> Specs
+allMonads str f = describe str $ do
+    it "IO" $ f id
+    it "ReaderT" $ f $ flip runReaderT ()
+    it "WriterT" $ f $ fmap fst' . runWriterT
+
 main :: IO ()
 main = hspecX $ do
-    describe "catch" $ do
-        it "IO" $ caseCatch id
-        it "ReaderT" $ caseCatch $ flip runReaderT ()
-        it "WriterT" $ caseCatch $ fmap fst' . runWriterT
-    describe "try" $ do
-        it "IO" $ caseTry id
-        it "ReaderT" $ caseTry $ flip runReaderT ()
-        it "WriterT" $ caseTry $ fmap fst' . runWriterT
+    allMonads "catch" caseCatch
+    allMonads "try" caseTry
 
 fst' :: (a, ()) -> a
 fst' (a, ()) = a
 
-caseCatch :: MBCIO m => (m () -> IO ()) -> IO ()
+caseCatch :: Case
 caseCatch unwrap = unwrap $ E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ flip EE.catch ignorer $ do
     _ <- EL.consume
     error "foo"
@@ -41,7 +44,7 @@ caseCatch unwrap = unwrap $ E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ flip EE.
     ignorer :: Monad m => SomeException -> E.Iteratee a m ()
     ignorer _ = return ()
 
-caseTry :: MBCIO m => (forall a. m a -> IO a) -> IO ()
+caseTry :: Case
 caseTry unwrap = check =<< (unwrap $ E.run_ $ E.enumList 8 [1..1000 :: Int] E.$$ EE.try $ do
     _ <- EL.consume
     error "foo")
