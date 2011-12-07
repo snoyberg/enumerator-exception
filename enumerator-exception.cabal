@@ -1,0 +1,35 @@
+name:            enumerator-exception
+version:         0.0.0
+license:         BSD3
+license-file:    LICENSE
+author:          Michael Snoyman <michael@snoyman.com>
+maintainer:      Michael Snoyman <michael@snoyman.com>
+synopsis:        Exception handling functions for the enumerator package.
+category:        Data
+stability:       Stable
+cabal-version:   >= 1.8
+build-type:      Simple
+homepage:        https://github.com/snoyberg/enumerator-exception
+extra-source-files: test/main.hs
+
+library
+    build-depends:              base                     >= 4             && < 5
+                              , enumerator               >= 0.4           && < 0.5
+                              , lifted-base              >= 0.1.0.1       && < 0.2
+                              , monad-control            >= 0.3           && < 0.4
+    exposed-modules:            Data.Enumerator.Exception
+
+test-suite tests
+    type: exitcode-stdio-1.0
+    main-is: main.hs
+    hs-source-dirs: test
+    build-depends:              base                     >= 4             && < 5
+                              , enumerator-exception
+                              , transformers
+                              , monad-control
+                              , enumerator
+                              , hspec
+
+source-repository head
+  type:     git
+  location: git://github.com/snoyberg/enumerator-exception.git
