@@ -48,6 +48,7 @@ main = hspecX $ do
     allErrs "catch" caseCatch
     allErrs "try" caseTry
     allErrs "finally" caseFinally
+    allErrs "bracket" caseBracket
 
 body err = do
     case err of { ErrPre -> error "ErrPre" ; _ -> return () }
@@ -78,4 +79,16 @@ caseFinally err unwrap = do
     ea <- Control.Exception.try $ unwrap $ runner $ EE.finally (body err) (liftIO $ I.modifyIORef i (+ 1))
     res <- I.readIORef i
     res @?= 1
+    check err ea
+
+caseBracket :: ECase
+caseBracket err unwrap = do
+    i <- I.newIORef (0 :: Int)
+    ea <- Control.Exception.try $ unwrap $ runner $ do
+        EE.bracket
+            (liftIO (I.modifyIORef i (+ 3)) >> return i)
+            (\j -> liftIO $ I.modifyIORef j (+ 2))
+            (\j -> liftIO (I.modifyIORef j (+ 1)) >> body err)
+    res <- I.readIORef i
+    res @?= 6
     check err ea

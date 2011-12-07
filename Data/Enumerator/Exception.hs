@@ -5,6 +5,7 @@ module Data.Enumerator.Exception
     , try
     , finally
     , throwIO
+    , bracket
     ) where
 
 #if MC03
@@ -55,3 +56,12 @@ finally body final = do
     ea <- try' body
     _ <- try' final
     either throwIO return ea
+
+bracket :: MBCIO m
+        => Iteratee a m b
+        -> (b -> Iteratee a m c)
+        -> (b -> Iteratee a m d)
+        -> Iteratee a m d
+bracket acquire release body = do
+    x <- acquire
+    finally (body x) (release x)
